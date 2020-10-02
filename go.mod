@@ -14,6 +14,7 @@ require (
 	github.com/Jeffail/gabs/v2 v2.6.0
 	github.com/OneOfOne/xxhash v1.2.8
 	github.com/Shopify/sarama v1.27.0
+	github.com/apache/pulsar-client-go v0.2.0
 	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-lambda-go v1.19.1
 	github.com/aws/aws-sdk-go v1.34.5
