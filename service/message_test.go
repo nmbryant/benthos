@@ -140,3 +140,88 @@ func TestMessageCopyAirGapUnknownType(t *testing.T) {
 	assert.Equal(t, "and now this", string(b))
 	assert.Equal(t, "baz", v)
 }
+
+func TestMessageQuery(t *testing.T) {
+	p := message.NewPart([]byte(`{"foo":"bar"}`))
+	p.Metadata().Set("foo", "bar")
+	p.Metadata().Set("bar", "baz")
+	g1 := newAirGapMessage(p)
+
+	b, ok := g1.Bytes()
+	assert.True(t, ok)
+	assert.Equal(t, `{"foo":"bar"}`, string(b))
+
+	s, ok := g1.Structured()
+	assert.True(t, ok)
+	assert.Equal(t, map[string]interface{}{"foo": "bar"}, s)
+
+	m, ok := g1.Metadata().Get("foo")
+	assert.True(t, ok)
+	assert.Equal(t, "bar", m)
+
+	seen := map[string]string{}
+	g1.Metadata().Iter(func(k, v string) bool {
+		seen[k] = v
+		return false
+	})
+	assert.Len(t, seen, 1)
+
+	seen = map[string]string{}
+	g1.Metadata().Iter(func(k, v string) bool {
+		seen[k] = v
+		return true
+	})
+	assert.Equal(t, map[string]string{
+		"foo": "bar",
+		"bar": "baz",
+	}, seen)
+}
+
+func TestMessageMutate(t *testing.T) {
+	p := message.NewPart([]byte(`not a json doc`))
+	p.Metadata().Set("foo", "bar")
+	p.Metadata().Set("bar", "baz")
+	g1 := newAirGapMessage(p)
+
+	_, ok := g1.Structured()
+	assert.False(t, ok)
+
+	g1.SetStructured(map[string]interface{}{
+		"foo": "bar",
+	})
+	assert.Equal(t, "not a json doc", string(p.Get()))
+
+	s, ok := g1.Structured()
+	assert.True(t, ok)
+	assert.Equal(t, map[string]interface{}{
+		"foo": "bar",
+	}, s)
+
+	g1.SetBytes([]byte("foo bar baz"))
+	assert.Equal(t, "not a json doc", string(p.Get()))
+
+	_, ok = g1.Structured()
+	assert.False(t, ok)
+
+	b, ok := g1.Bytes()
+	assert.True(t, ok)
+	assert.Equal(t, "foo bar baz", string(b))
+
+	g1.Metadata().Delete("foo")
+
+	seen := map[string]string{}
+	g1.Metadata().Iter(func(k, v string) bool {
+		seen[k] = v
+		return true
+	})
+	assert.Equal(t, map[string]string{"bar": "baz"}, seen)
+
+	g1.Metadata().Set("foo", "new bar")
+
+	seen = map[string]string{}
+	g1.Metadata().Iter(func(k, v string) bool {
+		seen[k] = v
+		return true
+	})
+	assert.Equal(t, map[string]string{"foo": "new bar", "bar": "baz"}, seen)
+}
