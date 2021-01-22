@@ -48,7 +48,7 @@ var sftpPort string
 //	}
 //
 //	if err := pool.Retry(func() error {
-//		sftpPort, err = strconv.Atoi(resource.GetPort("22/tcp"))
+//		sftpPort = resource.GetPort("22/tcp")
 //		if err != nil {
 //			return err
 //		}
