@@ -33,33 +33,8 @@ var (
 // TypeSpec is a struct containing constructors, markdown descriptions and an
 // optional sanitisation function for each input type.
 type TypeSpec struct {
-	brokerConstructor func(
-		conf Config,
-		mgr types.Manager,
-		log log.Modular,
-		stats metrics.Type,
-		pipelineConstructors ...types.PipelineConstructorFunc,
-	) (Type, error)
-	constructor        func(conf Config, mgr types.Manager, log log.Modular, stats metrics.Type) (Type, error)
+	constructor        inputConstructor
 	sanitiseConfigFunc func(conf Config) (interface{}, error)
-
-	// DEPRECATED: This is a hack for until the batch processor is removed.
-	// TODO: V4 Remove this.
-	brokerConstructorHasBatchProcessor func(
-		hasBatchProc bool,
-		conf Config,
-		mgr types.Manager,
-		log log.Modular,
-		stats metrics.Type,
-		pipelineConstructors ...types.PipelineConstructorFunc,
-	) (Type, error)
-	constructorHasBatchProcessor func(
-		hasBatchProc bool,
-		conf Config,
-		mgr types.Manager,
-		log log.Modular,
-		stats metrics.Type,
-	) (Type, error)
 
 	Status      docs.Status
 	Version     string
@@ -69,6 +44,91 @@ type TypeSpec struct {
 	Footnotes   string
 	FieldSpecs  docs.FieldSpecs
 	Examples    []docs.AnnotatedExample
+}
+
+func constructProcessors(
+	hasBatchProc bool,
+	conf Config,
+	mgr types.Manager,
+	log log.Modular,
+	stats metrics.Type,
+	pipelines ...types.PipelineConstructorFunc,
+) (bool, []types.PipelineConstructorFunc) {
+	if len(conf.Processors) > 0 {
+		// TODO: V4 Remove this.
+		for _, procConf := range conf.Processors {
+			if procConf.Type == processor.TypeBatch {
+				hasBatchProc = true
+			}
+		}
+		pipelines = append([]types.PipelineConstructorFunc{func(i *int) (types.Pipeline, error) {
+			if i == nil {
+				procs := 0
+				i = &procs
+			}
+			processors := make([]types.Processor, len(conf.Processors))
+			for j, procConf := range conf.Processors {
+				prefix := fmt.Sprintf("processor.%v", *i)
+				var err error
+				processors[j], err = processor.New(procConf, mgr, log.NewModule("."+prefix), metrics.Namespaced(stats, prefix))
+				if err != nil {
+					return nil, fmt.Errorf("failed to create processor '%v': %v", procConf.Type, err)
+				}
+				*i++
+			}
+			return pipeline.NewProcessor(log, stats, processors...), nil
+		}}, pipelines...)
+	}
+	return hasBatchProc, pipelines
+}
+
+type simpleConstructor func(Config, types.Manager, log.Modular, metrics.Type) (Type, error)
+
+type batchAwareConstructor func(bool, Config, types.Manager, log.Modular, metrics.Type) (Type, error)
+
+type inputConstructor func(
+	hasBatchProc bool,
+	conf Config,
+	mgr types.Manager,
+	log log.Modular,
+	stats metrics.Type,
+	pipelines ...types.PipelineConstructorFunc,
+) (Type, error)
+
+func fromSimpleConstructor(fn simpleConstructor) inputConstructor {
+	return func(
+		hasBatchProc bool,
+		conf Config,
+		mgr types.Manager,
+		log log.Modular,
+		stats metrics.Type,
+		pipelines ...types.PipelineConstructorFunc,
+	) (Type, error) {
+		input, err := fn(conf, mgr, log, stats)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create input '%v': %w", conf.Type, err)
+		}
+		_, pipelines = constructProcessors(hasBatchProc, conf, mgr, log, stats, pipelines...)
+		return WrapWithPipelines(input, pipelines...)
+	}
+}
+
+func fromBatchAwareConstructor(fn batchAwareConstructor) inputConstructor {
+	return func(
+		hasBatchProc bool,
+		conf Config,
+		mgr types.Manager,
+		log log.Modular,
+		stats metrics.Type,
+		pipelines ...types.PipelineConstructorFunc,
+	) (Type, error) {
+		input, err := fn(hasBatchProc, conf, mgr, log, stats)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create input '%v': %w", conf.Type, err)
+		}
+		_, pipelines = constructProcessors(hasBatchProc, conf, mgr, log, stats, pipelines...)
+		return WrapWithPipelines(input, pipelines...)
+	}
 }
 
 // Constructors is a map of all input types with their specs.
@@ -357,59 +417,11 @@ func newHasBatchProcessor(
 	stats metrics.Type,
 	pipelines ...types.PipelineConstructorFunc,
 ) (Type, error) {
-	if len(conf.Processors) > 0 {
-		// TODO: V4 Remove this.
-		for _, procConf := range conf.Processors {
-			if procConf.Type == processor.TypeBatch {
-				hasBatchProc = true
-			}
-		}
-
-		pipelines = append([]types.PipelineConstructorFunc{func(i *int) (types.Pipeline, error) {
-			if i == nil {
-				procs := 0
-				i = &procs
-			}
-			processors := make([]types.Processor, len(conf.Processors))
-			for j, procConf := range conf.Processors {
-				prefix := fmt.Sprintf("processor.%v", *i)
-				var err error
-				processors[j], err = processor.New(procConf, mgr, log.NewModule("."+prefix), metrics.Namespaced(stats, prefix))
-				if err != nil {
-					return nil, fmt.Errorf("failed to create processor '%v': %v", procConf.Type, err)
-				}
-				*i++
-			}
-			return pipeline.NewProcessor(log, stats, processors...), nil
-		}}, pipelines...)
-	}
 	if c, ok := Constructors[conf.Type]; ok {
-		// TODO: V4 Remove this.
-		if c.brokerConstructorHasBatchProcessor != nil {
-			return c.brokerConstructorHasBatchProcessor(hasBatchProc, conf, mgr, log, stats, pipelines...)
-		}
-		if c.brokerConstructor != nil {
-			return c.brokerConstructor(conf, mgr, log, stats, pipelines...)
-		}
-		var input Type
-		var err error
-		// TODO: V4 Remove this.
-		if c.constructorHasBatchProcessor != nil {
-			input, err = c.constructorHasBatchProcessor(hasBatchProc, conf, mgr, log, stats)
-		} else {
-			input, err = c.constructor(conf, mgr, log, stats)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to create input '%v': %v", conf.Type, err)
-		}
-		return WrapWithPipelines(input, pipelines...)
+		return c.constructor(hasBatchProc, conf, mgr, log, stats, pipelines...)
 	}
 	if c, ok := pluginSpecs[conf.Type]; ok {
-		input, err := c.constructor(conf.Plugin, mgr, log, stats)
-		if err != nil {
-			return nil, err
-		}
-		return WrapWithPipelines(input, pipelines...)
+		return c.constructor(hasBatchProc, conf, mgr, log, stats, pipelines...)
 	}
 	return nil, types.ErrInvalidInputType
 }

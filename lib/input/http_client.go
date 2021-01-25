@@ -41,7 +41,7 @@ then line feed (\n) is used.`).HasType("string"),
 
 func init() {
 	Constructors[TypeHTTPClient] = TypeSpec{
-		constructor: NewHTTPClient,
+		constructor: fromSimpleConstructor(NewHTTPClient),
 		Summary: `
 Connects to a server and continuously performs requests for a single message.`,
 		Description: `
@@ -239,14 +239,6 @@ func NewHTTPClient(conf Config, mgr types.Manager, log log.Modular, stats metric
 
 func (h *HTTPClient) doRequest() (*http.Response, error) {
 	return h.client.Do(h.payload)
-}
-
-func (h *HTTPClient) parseResponse(res *http.Response) (types.Message, error) {
-	msg, err := h.client.ParseResponse(res)
-	if err != nil {
-		return nil, err
-	}
-	return msg, nil
 }
 
 //------------------------------------------------------------------------------

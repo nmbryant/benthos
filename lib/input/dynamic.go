@@ -20,7 +20,17 @@ import (
 
 func init() {
 	Constructors[TypeDynamic] = TypeSpec{
-		brokerConstructor: NewDynamic,
+		constructor: func(
+			hasBatchProc bool,
+			conf Config,
+			mgr types.Manager,
+			log log.Modular,
+			stats metrics.Type,
+			pipelines ...types.PipelineConstructorFunc,
+		) (Type, error) {
+			_, pipelines = constructProcessors(hasBatchProc, conf, mgr, log, stats, pipelines...)
+			return NewDynamic(conf, mgr, log, stats, pipelines...)
+		},
 		Summary: `
 A special broker type where the inputs are identified by unique labels and can
 be created, changed and removed during runtime via a REST HTTP interface.`,

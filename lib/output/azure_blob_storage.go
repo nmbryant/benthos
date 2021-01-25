@@ -12,7 +12,7 @@ import (
 
 func init() {
 	Constructors[TypeAzureBlobStorage] = TypeSpec{
-		constructor: NewAzureBlobStorage,
+		constructor: fromSimpleConstructor(NewAzureBlobStorage),
 		Status:      docs.StatusBeta,
 		Version:     "3.36.0",
 		Summary: `
@@ -35,6 +35,10 @@ calculated per message of a batch.`,
 				"storage_access_key",
 				"The storage account access key. This field is ignored if `storage_connection_string` is set.",
 			),
+			docs.FieldCommon(
+				"storage_sas_token",
+				"The storage account SAS token. This field is ignored if `storage_connection_string` or `storage_access_key` / `storage_sas_token` are set.",
+			).AtVersion("3.38.0"),
 			docs.FieldCommon(
 				"storage_connection_string",
 				"A storage account connection string. This field is required if `storage_account` and `storage_access_key` are not set.",
@@ -64,7 +68,7 @@ calculated per message of a batch.`,
 	}
 
 	Constructors[TypeBlobStorage] = TypeSpec{
-		constructor: newDeprecatedBlobStorage,
+		constructor: fromSimpleConstructor(newDeprecatedBlobStorage),
 		Status:      docs.StatusDeprecated,
 		Summary:     "This component has been renamed to [`azure_blob_storage`](/docs/components/outputs/azure_blob_storage).",
 		Async:       true,
@@ -78,8 +82,12 @@ calculated per message of a batch.`,
 				"The storage account access key. This field is ignored if `storage_connection_string` is set.",
 			),
 			docs.FieldCommon(
+				"storage_sas_token",
+				"The storage account SAS token. This field is ignored if `storage_connection_string` or `storage_access_key` are set.",
+			),
+			docs.FieldCommon(
 				"storage_connection_string",
-				"A storage account connection string. This field is required if `storage_account` and `storage_access_key` are not set.",
+				"A storage account connection string. This field is required if `storage_account` and `storage_access_key` / `storage_sas_token` are not set.",
 			),
 			docs.FieldAdvanced("public_access_level", `The container's public access level. The default value is `+"`PRIVATE`"+`.`).HasOptions(
 				"PRIVATE", "BLOB", "CONTAINER",

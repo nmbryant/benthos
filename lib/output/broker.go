@@ -24,7 +24,7 @@ var (
 
 func init() {
 	Constructors[TypeBroker] = TypeSpec{
-		brokerConstructor: NewBroker,
+		constructor: NewBroker,
 		Summary: `
 Allows you to route messages to multiple child outputs using a range of
 brokering [patterns](#patterns).`,
@@ -160,6 +160,8 @@ func NewBroker(
 	stats metrics.Type,
 	pipelines ...types.PipelineConstructorFunc,
 ) (Type, error) {
+	pipelines = constructProcessors(conf, mgr, log, stats, pipelines...)
+
 	outputConfs := conf.Broker.Outputs
 
 	lOutputs := len(outputConfs) * conf.Broker.Copies
