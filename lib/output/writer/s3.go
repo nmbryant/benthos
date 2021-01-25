@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Jeffail/benthos/v3/internal/bloblang"
@@ -26,6 +29,7 @@ type AmazonS3Config struct {
 	Bucket             string             `json:"bucket" yaml:"bucket"`
 	ForcePathStyleURLs bool               `json:"force_path_style_urls" yaml:"force_path_style_urls"`
 	Path               string             `json:"path" yaml:"path"`
+	Tags               map[string]string  `json:"tags" yaml:"tags"`
 	ContentType        string             `json:"content_type" yaml:"content_type"`
 	ContentEncoding    string             `json:"content_encoding" yaml:"content_encoding"`
 	StorageClass       string             `json:"storage_class" yaml:"storage_class"`
@@ -42,6 +46,7 @@ func NewAmazonS3Config() AmazonS3Config {
 		Bucket:             "",
 		ForcePathStyleURLs: false,
 		Path:               `${!count("files")}-${!timestamp_unix_nano()}.txt`,
+		Tags:               map[string]string{},
 		ContentType:        "application/octet-stream",
 		ContentEncoding:    "",
 		StorageClass:       "STANDARD",
@@ -54,12 +59,18 @@ func NewAmazonS3Config() AmazonS3Config {
 
 //------------------------------------------------------------------------------
 
+type s3TagPair struct {
+	key   string
+	value field.Expression
+}
+
 // AmazonS3 is a benthos writer.Type implementation that writes messages to an
 // Amazon S3 bucket.
 type AmazonS3 struct {
 	conf AmazonS3Config
 
 	path            field.Expression
+	tags            []s3TagPair
 	contentType     field.Expression
 	contentEncoding field.Expression
 	storageClass    field.Expression
@@ -104,6 +115,22 @@ func NewAmazonS3(
 	if a.storageClass, err = bloblang.NewField(conf.StorageClass); err != nil {
 		return nil, fmt.Errorf("failed to parse storage class expression: %v", err)
 	}
+
+	a.tags = make([]s3TagPair, 0, len(conf.Tags))
+	for k, v := range conf.Tags {
+		vExpr, err := bloblang.NewField(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse tag expression for key '%v': %v", k, err)
+		}
+		a.tags = append(a.tags, s3TagPair{
+			key:   k,
+			value: vExpr,
+		})
+	}
+	sort.Slice(a.tags, func(i, j int) bool {
+		return a.tags[i].key < a.tags[j].key
+	})
+
 	return a, nil
 }
 
@@ -170,6 +197,15 @@ func (a *AmazonS3) WriteWithContext(wctx context.Context, msg types.Message) err
 			ContentEncoding: contentEncoding,
 			StorageClass:    aws.String(a.storageClass.String(i, msg)),
 			Metadata:        metadata,
+		}
+
+		// Prepare tags, escaping keys and values to ensure they're valid query string parameters.
+		if len(a.tags) > 0 {
+			tags := make([]string, len(a.tags))
+			for i, pair := range a.tags {
+				tags[i] = url.QueryEscape(pair.key) + "=" + url.QueryEscape(pair.value.String(i, msg))
+			}
+			uploadInput.Tagging = aws.String(strings.Join(tags, "&"))
 		}
 
 		if a.conf.KMSKeyID != "" {

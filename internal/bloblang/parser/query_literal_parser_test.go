@@ -35,11 +35,6 @@ func TestLiteralParserErrors(t *testing.T) {
 }
 
 func TestLiteralParser(t *testing.T) {
-	type easyMsg struct {
-		content string
-		meta    map[string]string
-	}
-
 	tests := map[string]struct {
 		mapping  string
 		result   interface{}
@@ -118,7 +113,10 @@ func TestLiteralParser(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			res := ParseQuery([]rune(test.mapping))
+			res := queryParser(Context{
+				Functions: query.AllFunctions,
+				Methods:   query.AllMethods,
+			})([]rune(test.mapping))
 			if len(test.parseErr) > 0 {
 				assert.Equal(t, test.parseErr, res.Err.Error())
 				return

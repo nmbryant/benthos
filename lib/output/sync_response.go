@@ -11,9 +11,9 @@ import (
 
 func init() {
 	Constructors[TypeSyncResponse] = TypeSpec{
-		constructor: func(_ Config, _ types.Manager, logger log.Modular, stats metrics.Type) (Type, error) {
+		constructor: fromSimpleConstructor(func(_ Config, _ types.Manager, logger log.Modular, stats metrics.Type) (Type, error) {
 			return NewWriter(TypeSyncResponse, roundtrip.Writer{}, logger, stats)
-		},
+		}),
 		Summary: `
 Returns the final message payload back to the input origin of the message, where
 it is dealt with according to that specific input type.`,
@@ -27,7 +27,7 @@ It is safe to combine this output with others using broker types. For example,
 with the ` + "`http_server`" + ` input we could send the payload to a Kafka
 topic and also send a modified payload back with:
 
-` + "``` yaml" + `
+` + "```yaml" + `
 input:
   http_server:
     path: /post

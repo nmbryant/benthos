@@ -11,7 +11,7 @@ import (
 
 func init() {
 	Constructors[TypeAzureBlobStorage] = TypeSpec{
-		constructor: func(conf Config, mgr types.Manager, log log.Modular, stats metrics.Type) (Type, error) {
+		constructor: fromSimpleConstructor(func(conf Config, mgr types.Manager, log log.Modular, stats metrics.Type) (Type, error) {
 			r, err := newAzureBlobStorage(conf.AzureBlobStorage, log, stats)
 			if err != nil {
 				return nil, err
@@ -24,7 +24,7 @@ func init() {
 				),
 				log, stats,
 			)
-		},
+		}),
 		Status:  docs.StatusBeta,
 		Version: "3.36.0",
 		Summary: `
@@ -64,7 +64,7 @@ You can access these metadata fields using [function interpolation](/docs/config
 			docs.FieldCommon(
 				"storage_sas_token",
 				"The storage account SAS token. This field is ignored if `storage_connection_string` or `storage_access_key` are set.",
-			),
+			).AtVersion("3.38.0"),
 			docs.FieldCommon(
 				"storage_connection_string",
 				"A storage account connection string. This field is required if `storage_account` and `storage_access_key` / `storage_sas_token` are not set.",

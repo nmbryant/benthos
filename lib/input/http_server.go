@@ -37,7 +37,7 @@ import (
 
 func init() {
 	Constructors[TypeHTTPServer] = TypeSpec{
-		constructor: NewHTTPServer,
+		constructor: fromSimpleConstructor(NewHTTPServer),
 		Summary: `
 Receive messages POSTed over HTTP(S). HTTP 2.0 is supported when using TLS,
 which is enabled when key and cert files are specified.`,
@@ -216,9 +216,6 @@ type HTTPServer struct {
 	mWSRateLimited metrics.StatCounter
 	mRcvd          metrics.StatCounter
 	mPartsRcvd     metrics.StatCounter
-	mSyncCount     metrics.StatCounter
-	mSyncErr       metrics.StatCounter
-	mSyncSucc      metrics.StatCounter
 	mWSCount       metrics.StatCounter
 	mTimeout       metrics.StatCounter
 	mErr           metrics.StatCounter
@@ -352,7 +349,6 @@ func extractMessageFromRequest(r *http.Request) (types.Message, error) {
 			var p *multipart.Part
 			if p, err = mr.NextPart(); err != nil {
 				if err == io.EOF {
-					err = nil
 					break
 				}
 				return nil, err

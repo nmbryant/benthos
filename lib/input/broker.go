@@ -27,8 +27,7 @@ var (
 
 func init() {
 	Constructors[TypeBroker] = TypeSpec{
-		brokerConstructor:                  NewBroker,
-		brokerConstructorHasBatchProcessor: newBrokerHasBatchProcessor,
+		constructor: newBrokerHasBatchProcessor,
 		Summary: `
 Allows you to combine multiple inputs, where each input will be read in
 parallel.`,
@@ -39,7 +38,7 @@ field to specify how many copies of the list of inputs should be created.
 Adding more input types allows you to merge streams from multiple sources into
 one. For example, reading from both RabbitMQ and Kafka:
 
-` + "``` yaml" + `
+` + "```yaml" + `
 input:
   broker:
     copies: 1
@@ -252,6 +251,8 @@ func newBrokerHasBatchProcessor(
 	stats metrics.Type,
 	pipelines ...types.PipelineConstructorFunc,
 ) (Type, error) {
+	hasBatchProc, pipelines = constructProcessors(hasBatchProc, conf, mgr, log, stats, pipelines...)
+
 	lInputs := len(conf.Broker.Inputs) * conf.Broker.Copies
 
 	if lInputs <= 0 {

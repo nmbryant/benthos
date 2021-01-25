@@ -13,7 +13,7 @@ import (
 
 func init() {
 	Constructors[TypeAzureTableStorage] = TypeSpec{
-		constructor: NewAzureTableStorage,
+		constructor: fromSimpleConstructor(NewAzureTableStorage),
 		Status:      docs.StatusBeta,
 		Version:     "3.36.0",
 		Summary: `
@@ -31,7 +31,7 @@ are marshaled and stored in the table, which will be created if it does not exis
 The ` + "`object`" + ` and ` + "`array`" + ` fields are marshaled as strings. e.g.:
 
 The JSON message:
-` + "``` yaml" + `
+` + "```json" + `
 {
   "foo": 55,
   "bar": {
@@ -43,7 +43,7 @@ The JSON message:
 ` + "```" + `
 
 Will store in the table the following properties:
-` + "``` yaml" + `
+` + "```yaml" + `
 foo: '55'
 bar: '{ "baz": "a", "bez": "b" }'
 diz: '["a", "b"]'
@@ -99,7 +99,7 @@ properties:
 	}
 
 	Constructors[TypeTableStorage] = TypeSpec{
-		constructor: newDeprecatedTableStorage,
+		constructor: fromSimpleConstructor(newDeprecatedTableStorage),
 		Status:      docs.StatusDeprecated,
 		Summary:     "This component has been renamed to [`azure_table_storage`](/docs/components/outputs/azure_table_storage).",
 		sanitiseConfigFunc: func(conf Config) (interface{}, error) {

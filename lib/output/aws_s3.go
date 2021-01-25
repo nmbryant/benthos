@@ -14,7 +14,7 @@ import (
 
 func init() {
 	Constructors[TypeAWSS3] = TypeSpec{
-		constructor: NewAWSS3,
+		constructor: fromSimpleConstructor(NewAWSS3),
 		Version:     "3.36.0",
 		Summary: `
 Sends message parts as objects to an Amazon S3 bucket. Each object is uploaded
@@ -27,6 +27,21 @@ calculated per message of a batch.
 ### Metadata
 
 Metadata fields on messages will be sent as headers, in order to mutate these values (or remove them) check out the [metadata docs](/docs/configuration/metadata).
+
+### Tags
+
+The tags field allows you to specify key/value pairs to attach to objects as tags, where the values support
+[interpolation functions](/docs/configuration/interpolation#bloblang-queries):
+
+` + "```yaml" + `
+output:
+    aws_s3:
+        bucket: TODO
+        path: ${!count("files")}-${!timestamp_unix_nano()}.tar.gz
+        tags:
+            Key1: Value1
+            Timestamp: ${!meta("Timestamp")}
+` + "```" + `
 
 ### Credentials
 
@@ -87,6 +102,13 @@ output:
 				`${!meta("kafka_key")}.json`,
 				`${!json("doc.namespace")}/${!json("doc.id")}.json`,
 			).SupportsInterpolation(false),
+			docs.FieldCommon(
+				"tags", "Key/value pairs to store with the object as tags.",
+				map[string]string{
+					"Key1":      "Value1",
+					"Timestamp": `${!meta("Timestamp")}`,
+				},
+			).SupportsInterpolation(false),
 			docs.FieldCommon("content_type", "The content type to set for each object.").SupportsInterpolation(false),
 			docs.FieldAdvanced("content_encoding", "An optional content encoding to set for each object.").SupportsInterpolation(false),
 			docs.FieldAdvanced("storage_class", "The storage class to set for each object.").HasOptions(
@@ -105,7 +127,7 @@ output:
 	}
 
 	Constructors[TypeS3] = TypeSpec{
-		constructor: NewAmazonS3,
+		constructor: fromSimpleConstructor(NewAmazonS3),
 		Status:      docs.StatusDeprecated,
 		Summary: `
 Sends message parts as objects to an Amazon S3 bucket. Each object is uploaded
@@ -122,6 +144,21 @@ calculated per message of a batch.
 ### Metadata
 
 Metadata fields on messages will be sent as headers, in order to mutate these values (or remove them) check out the [metadata docs](/docs/configuration/metadata).
+
+### Tags
+
+The tags field allows you to specify key/value pairs to attach to objects as tags, where the values support
+[interpolation functions](/docs/configuration/interpolation#bloblang-queries):
+
+` + "```yaml" + `
+output:
+    aws_s3:
+        bucket: TODO
+        path: ${!count("files")}-${!timestamp_unix_nano()}.tar.gz
+        tags:
+            Key1: Value1
+            Timestamp: ${!meta("Timestamp")}
+` + "```" + `
 
 ### Credentials
 
@@ -181,6 +218,13 @@ output:
 				`${!count("files")}-${!timestamp_unix_nano()}.txt`,
 				`${!meta("kafka_key")}.json`,
 				`${!json("doc.namespace")}/${!json("doc.id")}.json`,
+			).SupportsInterpolation(false),
+			docs.FieldCommon(
+				"tags", "Key/value pairs to store with the object as tags.",
+				map[string]string{
+					"Key1":      "Value1",
+					"Timestamp": `${!meta("Timestamp")}`,
+				},
 			).SupportsInterpolation(false),
 			docs.FieldCommon("content_type", "The content type to set for each object.").SupportsInterpolation(false),
 			docs.FieldAdvanced("content_encoding", "An optional content encoding to set for each object.").SupportsInterpolation(false),

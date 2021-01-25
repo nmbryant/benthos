@@ -13,7 +13,7 @@ import (
 
 func init() {
 	Constructors[TypeTry] = TypeSpec{
-		brokerConstructor: NewTry,
+		constructor: NewTry,
 		Summary: `
 Attempts to send each message to a child output, starting from the first output
 on the list. If an output attempt fails then the next output in the list is
@@ -24,7 +24,7 @@ targets have broken. For example, if you had an output type ` + "`http_client`" 
 but wished to reroute messages whenever the endpoint becomes unreachable you
 could use this pattern:
 
-` + "``` yaml" + `
+` + "```yaml" + `
 output:
   try:
   - http_client:
@@ -106,6 +106,8 @@ func NewTry(
 	stats metrics.Type,
 	pipelines ...types.PipelineConstructorFunc,
 ) (Type, error) {
+	pipelines = constructProcessors(conf, mgr, log, stats, pipelines...)
+
 	outputConfs := conf.Try
 
 	if len(outputConfs) == 0 {
