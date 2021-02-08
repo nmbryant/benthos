@@ -156,6 +156,10 @@ input:
           max_outstanding_messages: ${INPUT_GCP_PUBSUB_MAX_OUTSTANDING_MESSAGES:1000}
           project: ${INPUT_GCP_PUBSUB_PROJECT}
           subscription: ${INPUT_GCP_PUBSUB_SUBSCRIPTION}
+        generate:
+          count: ${INPUT_GENERATE_COUNT:0}
+          interval: ${INPUT_GENERATE_INTERVAL:1s}
+          mapping: ${INPUT_GENERATE_MAPPING}
         hdfs:
           directory: ${INPUT_HDFS_DIRECTORY}
           hosts:
@@ -462,6 +466,12 @@ input:
           sqs_max_messages: ${INPUT_S3_SQS_MAX_MESSAGES:10}
           sqs_url: ${INPUT_S3_SQS_URL}
           timeout: ${INPUT_S3_TIMEOUT:5s}
+        sequence:
+          sharded_join:
+            id_path: ${INPUT_SEQUENCE_SHARDED_JOIN_ID_PATH}
+            iterations: ${INPUT_SEQUENCE_SHARDED_JOIN_ITERATIONS:1}
+            merge_strategy: ${INPUT_SEQUENCE_SHARDED_JOIN_MERGE_STRATEGY:array}
+            type: ${INPUT_SEQUENCE_SHARDED_JOIN_TYPE:none}
         sftp:
           address: ${INPUT_SFTP_ADDRESS}
           codec: ${INPUT_SFTP_CODEC:all-bytes}
@@ -760,6 +770,7 @@ pipeline:
         retries: ${PROCESSOR_LAMBDA_RETRIES:3}
         timeout: ${PROCESSOR_LAMBDA_TIMEOUT:5s}
       log:
+        fields_mapping: ${PROCESSOR_LOG_FIELDS_MAPPING}
         level: ${PROCESSOR_LOG_LEVEL:INFO}
         message: ${PROCESSOR_LOG_MESSAGE}
       merge_json:

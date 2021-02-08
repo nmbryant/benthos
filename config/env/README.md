@@ -173,6 +173,9 @@ INPUT_GCP_PUBSUB_MAX_OUTSTANDING_BYTES               = 1000000000
 INPUT_GCP_PUBSUB_MAX_OUTSTANDING_MESSAGES            = 1000
 INPUT_GCP_PUBSUB_PROJECT
 INPUT_GCP_PUBSUB_SUBSCRIPTION
+INPUT_GENERATE_COUNT                                 = 0
+INPUT_GENERATE_INTERVAL                              = 1s
+INPUT_GENERATE_MAPPING
 INPUT_HDFS_DIRECTORY
 INPUT_HDFS_HOSTS                                     = localhost:9000
 INPUT_HDFS_USER                                      = benthos_hdfs
@@ -419,6 +422,10 @@ INPUT_S3_SQS_ENVELOPE_PATH
 INPUT_S3_SQS_MAX_MESSAGES                            = 10
 INPUT_S3_SQS_URL
 INPUT_S3_TIMEOUT                                     = 5s
+INPUT_SEQUENCE_SHARDED_JOIN_ID_PATH
+INPUT_SEQUENCE_SHARDED_JOIN_ITERATIONS               = 1
+INPUT_SEQUENCE_SHARDED_JOIN_MERGE_STRATEGY           = array
+INPUT_SEQUENCE_SHARDED_JOIN_TYPE                     = none
 INPUT_SFTP_ADDRESS
 INPUT_SFTP_CODEC                                     = all-bytes
 INPUT_SFTP_CREDENTIALS_PASSWORD
@@ -656,6 +663,7 @@ PROCESSOR_LAMBDA_RATE_LIMIT
 PROCESSOR_LAMBDA_REGION                              = eu-west-1
 PROCESSOR_LAMBDA_RETRIES                             = 3
 PROCESSOR_LAMBDA_TIMEOUT                             = 5s
+PROCESSOR_LOG_FIELDS_MAPPING
 PROCESSOR_LOG_LEVEL                                  = INFO
 PROCESSOR_LOG_MESSAGE
 PROCESSOR_MERGE_JSON_RETAIN_PARTS                    = false

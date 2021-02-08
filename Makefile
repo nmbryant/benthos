@@ -21,8 +21,9 @@ DATE      := $(shell date +"%Y-%m-%dT%H:%M:%SZ")
 VER_FLAGS = -X github.com/Jeffail/benthos/v3/lib/service.Version=$(VERSION) \
 	-X github.com/Jeffail/benthos/v3/lib/service.DateBuilt=$(DATE)
 
-LD_FLAGS =
-GO_FLAGS =
+LD_FLAGS   =
+GO_FLAGS   =
+DOCS_FLAGS =
 
 APPS = benthos
 all: $(APPS)
@@ -85,7 +86,7 @@ fmt:
 
 lint:
 	@go vet $(GO_FLAGS) ./...
-	@golangci-lint run cmd/... lib/... internal/...
+	@golangci-lint run cmd/... lib/... internal/... public/...
 
 test: $(APPS)
 	@go test $(GO_FLAGS) -timeout 300s -race ./...
@@ -108,8 +109,8 @@ clean:
 	rm -rf $(PATHINSTDOCKER)
 
 docs: $(APPS) $(TOOLS)
-	@$(PATHINSTTOOLS)/benthos_config_gen
-	@$(PATHINSTTOOLS)/benthos_docs_gen
+	@$(PATHINSTTOOLS)/benthos_config_gen $(DOCS_FLAGS)
+	@$(PATHINSTTOOLS)/benthos_docs_gen $(DOCS_FLAGS)
 	@$(PATHINSTBIN)/benthos lint ./config/... \
 		$(WEBSITE_DIR)/cookbooks/*.md \
 		$(WEBSITE_DIR)/docs/components/**/about.md \

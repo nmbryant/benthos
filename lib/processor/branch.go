@@ -77,6 +77,23 @@ pipeline:
 `,
 			},
 			{
+				Title: "Non Structured Results",
+				Summary: `
+When the result of your branch processors is unstructured and you wish to simply set a resulting field to the raw output use the content function to obtain the raw bytes of the resulting message and then coerce it into your value type of choice:`,
+				Config: `
+pipeline:
+  processors:
+    - branch:
+        request_map: 'root = this.document.id'
+        processors:
+          - cache:
+              resource: descriptions_cache
+              key: ${! content() }
+              operator: get
+        result_map: root.document.description = content().string()
+`,
+			},
+			{
 				Title: "Lambda Function",
 				Summary: `
 This example maps a new payload for triggering a lambda function with an ID and
@@ -137,12 +154,13 @@ pipeline:
 			),
 			docs.FieldCommon(
 				"result_map",
-				"A [Bloblang mapping](/docs/guides/bloblang/about) that describes how the resulting messages from branched processing should be mapped back into the original payload. If left empty the origin message will remain unchanged  (including metadata).",
+				"A [Bloblang mapping](/docs/guides/bloblang/about) that describes how the resulting messages from branched processing should be mapped back into the original payload. If left empty the origin message will remain unchanged (including metadata).",
 				`meta foo_code = meta("code")
 root.foo_result = this`,
 				`meta = meta()
 root.bar.body = this.body
 root.bar.id = this.user.id`,
+				`root.raw_result = content().string()`,
 				`root.enrichments.foo = if errored() {
 	throw(error())
 } else {
@@ -343,7 +361,7 @@ func (b *Branch) ProcessMessage(msg types.Message) ([]types.Message, types.Respo
 		return nil
 	})
 
-	resultParts, mapErrs, err := b.createResult(parts, msg)
+	resultParts, mapErrs, err := b.createResult(parts, branchMsg)
 	if err != nil {
 		result := msg.Copy()
 		// Add general error to all messages.

@@ -16,6 +16,9 @@ type MethodSet struct {
 // a constructor to be called for each instantiation of the method, and
 // information regarding the arguments of the method.
 func (m *MethodSet) Add(spec MethodSpec, ctor MethodCtor, allowDynamicArgs bool, checks ...ArgCheckFn) error {
+	if !nameRegexp.MatchString(spec.Name) {
+		return fmt.Errorf("method name '%v' does not match the required regular expression /%v/", spec.Name, nameRegexpRaw)
+	}
 	if len(checks) > 0 {
 		ctor = checkMethodArgs(ctor, checks...)
 	}
@@ -54,6 +57,30 @@ func (m *MethodSet) Init(name string, target Function, args ...interface{}) (Fun
 	}
 	expandLiteralArgs(args)
 	return ctor(target, args...)
+}
+
+// Without creates a clone of the method set that can be mutated in isolation,
+// where a variadic list of methods will be excluded from the set.
+func (m *MethodSet) Without(methods ...string) *MethodSet {
+	excludeMap := make(map[string]struct{}, len(methods))
+	for _, k := range methods {
+		excludeMap[k] = struct{}{}
+	}
+
+	constructors := make(map[string]MethodCtor, len(m.constructors))
+	for k, v := range m.constructors {
+		if _, exists := excludeMap[k]; !exists {
+			constructors[k] = v
+		}
+	}
+
+	specs := make([]MethodSpec, 0, len(m.specs))
+	for _, v := range m.specs {
+		if _, exists := excludeMap[v.Name]; !exists {
+			specs = append(specs, v)
+		}
+	}
+	return &MethodSet{constructors, specs}
 }
 
 //------------------------------------------------------------------------------

@@ -12,7 +12,6 @@ import (
 	"github.com/Jeffail/benthos/v3/lib/metrics"
 	"github.com/Jeffail/benthos/v3/lib/types"
 	"github.com/Jeffail/gabs/v2"
-	"github.com/opentracing/opentracing-go"
 )
 
 //------------------------------------------------------------------------------
@@ -431,21 +430,17 @@ func trackerFromTree(tree [][]string) *resultTracker {
 
 func (r *resultTracker) Skipped(k string) {
 	r.Lock()
-	if _, exists := r.succeeded[k]; exists {
-		delete(r.succeeded, k)
-	}
+	delete(r.succeeded, k)
+
 	r.skipped[k] = struct{}{}
 	r.Unlock()
 }
 
 func (r *resultTracker) Failed(k, why string) {
 	r.Lock()
-	if _, exists := r.succeeded[k]; exists {
-		delete(r.succeeded, k)
-	}
-	if _, exists := r.skipped[k]; exists {
-		delete(r.skipped, k)
-	}
+	delete(r.succeeded, k)
+	delete(r.skipped, k)
+
 	r.failed[k] = why
 	r.Unlock()
 }
@@ -582,23 +577,22 @@ func (w *Workflow) ProcessMessage(msg types.Message) ([]types.Message, types.Res
 		wg.Add(len(layer))
 		for i, eid := range layer {
 			go func(id string, index int) {
-				requestParts := make([]types.Part, propMsg.Len())
-				propMsg.Iter(func(partIndex int, p types.Part) error {
+				branchMsg, branchSpans := tracing.WithChildSpans(id, propMsg.Copy())
+
+				branchParts := make([]types.Part, branchMsg.Len())
+				branchMsg.Iter(func(partIndex int, part types.Part) error {
+					// Remove errors so that they aren't propagated into the
+					// branch.
+					ClearFail(part)
 					if _, exists := skipOnMeta[partIndex][id]; !exists {
-						part := p.Copy()
-						// Remove errors so that they aren't propagated into the
-						// branch.
-						ClearFail(part)
-						requestParts[partIndex] = part
+						branchParts[partIndex] = part
 					}
 					return nil
 				})
 
 				var mapErrs []branchMapError
-				var requestSpans []opentracing.Span
-				requestParts, requestSpans = tracing.PartsWithChildSpans(id, requestParts)
-				results[index], mapErrs, errors[index] = children[id].createResult(requestParts, propMsg)
-				for _, s := range requestSpans {
+				results[index], mapErrs, errors[index] = children[id].createResult(branchParts, branchMsg)
+				for _, s := range branchSpans {
 					s.Finish()
 				}
 				for j, p := range results[index] {

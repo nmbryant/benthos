@@ -5,11 +5,44 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 3.40.0 - 2021-02-08
+
+### New
+
+- Experimental `sharded_join` fields added to the `sequence` input.
+- Added a new API for writing Bloblang plugins in Go at [`./public/bloblang`](https://pkg.go.dev/github.com/Jeffail/benthos/v3/public/bloblang).
+- Field `fields_mapping` added to the `log` processor.
+
+### Fixed
+
+- Prevented pre-existing errors from failing/aborting branch execution in the `branch` and `workflow` processors.
+- Fixed `subprocess` processor message corruption with codecs `length_prefixed_uint32_be` and `netstring`.
+
+### Changed
+
+- The `bloblang` input has been renamed to `generate`. This change is backwards compatible and `bloblang` will still be recognized until the next major version release.
+- Bloblang more often preserves integer precision in arithmetic operations.
+
+## 3.39.0 - 2021-02-01
+
 ### New
 
 - Field `key` in output `redis_list` now supports interpolation functions.
 - Field `tags` added to output `aws_s3`.
 - New experimental `sftp` input and output.
+- New input codec `chunker`.
+- New field `import_paths` added to the `protobuf` processor, replaces the now deprecated `import_path` field.
+- Added format `concatenate` to the `archive` processor.
+
+### Changed
+
+- The `aws_lambda` processor now adds a metadata field `lambda_function_error` to messages when the function invocation suffers a runtime error.
+
+### Fixed
+
+- Fixed an issue with the `azure_blob_storage` output where `blob_type` set to `APPEND` could result in send failures.
+- Fixed a potential panic when shutting down a `socket_server` input with messages in flight.
+- The `switch` processor now correctly flags errors on messages that cause a check to throw an error.
 
 ## 3.38.0 - 2021-01-18
 
@@ -290,7 +323,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- The `http` processor field `max_parallel` has been deprecated in favour of rate limits, and the fields within `request` have been moved to the root of the `http` namespace. This change is backwards compatible and `http.request` fields will still be recognized until the next version release.
+- The `http` processor field `max_parallel` has been deprecated in favour of rate limits, and the fields within `request` have been moved to the root of the `http` namespace. This change is backwards compatible and `http.request` fields will still be recognized until the next major version release.
 - The `process_field` processor is now deprecated, and `branch` should be used instead.
 
 ### Fixed

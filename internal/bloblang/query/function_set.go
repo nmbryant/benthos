@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 )
 
@@ -12,10 +13,16 @@ type FunctionSet struct {
 	specs        []FunctionSpec
 }
 
+var nameRegexpRaw = `^[a-z0-9]+(_[a-z0-9]+)*$`
+var nameRegexp = regexp.MustCompile(nameRegexpRaw)
+
 // Add a new function to this set by providing a spec (name and documentation),
 // a constructor to be called for each instantiation of the function, and
 // information regarding the arguments of the function.
-func (f *FunctionSet) Add(spec FunctionSpec, allowDynamicArgs bool, ctor FunctionCtor, checks ...ArgCheckFn) error {
+func (f *FunctionSet) Add(spec FunctionSpec, ctor FunctionCtor, allowDynamicArgs bool, checks ...ArgCheckFn) error {
+	if !nameRegexp.MatchString(spec.Name) {
+		return fmt.Errorf("function name '%v' does not match the required regular expression /%v/", spec.Name, nameRegexpRaw)
+	}
 	if len(checks) > 0 {
 		ctor = checkArgs(ctor, checks...)
 	}
@@ -56,6 +63,30 @@ func (f *FunctionSet) Init(name string, args ...interface{}) (Function, error) {
 	return ctor(args...)
 }
 
+// Without creates a clone of the function set that can be mutated in isolation,
+// where a variadic list of functions will be excluded from the set.
+func (f *FunctionSet) Without(functions ...string) *FunctionSet {
+	excludeMap := make(map[string]struct{}, len(functions))
+	for _, k := range functions {
+		excludeMap[k] = struct{}{}
+	}
+
+	constructors := make(map[string]FunctionCtor, len(f.constructors))
+	for k, v := range f.constructors {
+		if _, exists := excludeMap[k]; !exists {
+			constructors[k] = v
+		}
+	}
+
+	specs := make([]FunctionSpec, 0, len(f.specs))
+	for _, v := range f.specs {
+		if _, exists := excludeMap[v.Name]; !exists {
+			specs = append(specs, v)
+		}
+	}
+	return &FunctionSet{constructors, specs}
+}
+
 //------------------------------------------------------------------------------
 
 // AllFunctions is a set containing every single function declared by this
@@ -68,7 +99,7 @@ var AllFunctions = &FunctionSet{
 // RegisterFunction to be accessible from Bloblang queries. Returns an empty
 // struct in order to allow inline calls.
 func RegisterFunction(spec FunctionSpec, allowDynamicArgs bool, ctor FunctionCtor, checks ...ArgCheckFn) struct{} {
-	if err := AllFunctions.Add(spec, allowDynamicArgs, ctor, checks...); err != nil {
+	if err := AllFunctions.Add(spec, ctor, allowDynamicArgs, checks...); err != nil {
 		panic(err)
 	}
 	return struct{}{}
