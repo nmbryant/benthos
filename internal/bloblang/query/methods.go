@@ -1,7 +1,6 @@
 package query
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -129,25 +128,27 @@ var _ = RegisterMethod(
 		NewExampleSpec("",
 			`root.doc.id = this.thing.id.string().catch(uuid_v4())`,
 		),
+		NewExampleSpec("When the input document is not structured attempting to reference structured fields with `this` will result in an error. Therefore, a convenient way to delete non-structured data is with a catch.",
+			`root = this.catch(deleted())`,
+			`{"doc":{"foo":"bar"}}`,
+			`{"doc":{"foo":"bar"}}`,
+			`not structured data`,
+			`<Message deleted>`,
+		),
 	),
 	false, catchMethod,
 	ExpectNArgs(1),
 )
 
 func catchMethod(fn Function, args ...interface{}) (Function, error) {
-	var catchFn Function
-	switch t := args[0].(type) {
-	case uint64, int64, float64, json.Number, string, []byte, bool, []interface{}, map[string]interface{}:
-		catchFn = NewLiteralFunction(t)
-	case Function:
-		catchFn = t
-	default:
-		return nil, fmt.Errorf("expected query or literal argument, received %T", args[0])
+	catchFn, isFn := args[0].(Function)
+	if !isFn {
+		catchFn = NewLiteralFunction(args[0])
 	}
 	return ClosureFunction(func(ctx FunctionContext) (interface{}, error) {
 		res, err := fn.Exec(ctx)
 		if err != nil {
-			res, err = catchFn.Exec(ctx)
+			return catchFn.Exec(ctx)
 		}
 		return res, err
 	}, aggregateTargetPaths(fn, catchFn)), nil
@@ -460,19 +461,14 @@ var _ = RegisterMethod(
 )
 
 func orMethod(fn Function, args ...interface{}) (Function, error) {
-	var orFn Function
-	switch t := args[0].(type) {
-	case uint64, int64, float64, json.Number, string, []byte, bool, []interface{}, map[string]interface{}:
-		orFn = NewLiteralFunction(t)
-	case Function:
-		orFn = t
-	default:
-		return nil, fmt.Errorf("expected query or literal argument, received %T", args[0])
+	orFn, isFn := args[0].(Function)
+	if !isFn {
+		orFn = NewLiteralFunction(args[0])
 	}
 	return ClosureFunction(func(ctx FunctionContext) (interface{}, error) {
 		res, err := fn.Exec(ctx)
 		if err != nil || IIsNull(res) {
-			res, err = orFn.Exec(ctx)
+			return orFn.Exec(ctx)
 		}
 		return res, err
 	}, aggregateTargetPaths(fn, orFn)), nil

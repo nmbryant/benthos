@@ -3,6 +3,7 @@ package input
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -19,9 +20,30 @@ import (
 )
 
 func init() {
+	watcherDocs := docs.FieldSpecs{
+		docs.FieldCommon(
+			"enabled",
+			"Whether file watching is enabled.",
+		),
+		docs.FieldCommon(
+			"minimum_age",
+			"The minimum period of time since a file was last updated before attempting to consume it. Increasing this period decreases the likelihood that a file will be consumed whilst it is still being written to.",
+			"10s", "1m", "10m",
+		),
+		docs.FieldCommon(
+			"poll_interval",
+			"The interval between each attempt to scan the target paths for new files.",
+			"100ms", "1s",
+		),
+		docs.FieldCommon(
+			"cache",
+			"A [cache resource](/docs/components/caches/about) for storing the paths of files already consumed.",
+		),
+	}
+
 	Constructors[TypeSFTP] = TypeSpec{
 		constructor: fromSimpleConstructor(func(conf Config, mgr types.Manager, log log.Modular, stats metrics.Type) (Type, error) {
-			r, err := newSFTPReader(conf.SFTP, log, stats)
+			r, err := newSFTPReader(conf.SFTP, mgr, log, stats)
 			if err != nil {
 				return nil, err
 			}
@@ -61,6 +83,10 @@ You can access these metadata fields using [function interpolation](/docs/config
 			codec.ReaderDocs,
 			docs.FieldAdvanced("delete_on_finish", "Whether to delete files from the server once they are processed."),
 			docs.FieldAdvanced("max_buffer", "The largest token size expected when consuming delimited files."),
+			docs.FieldCommon(
+				"watcher",
+				"An experimental mode whereby the input will periodically scan the target paths for new files and consume them, when all files are consumed the input will continue polling for new files.",
+			).WithChildren(watcherDocs...).AtVersion("3.42.0"),
 		},
 		Categories: []Category{
 			CategoryNetwork,
@@ -70,6 +96,13 @@ You can access these metadata fields using [function interpolation](/docs/config
 
 //------------------------------------------------------------------------------
 
+type watcherConfig struct {
+	Enabled      bool   `json:"enabled" yaml:"enabled"`
+	MinimumAge   string `json:"minimum_age" yaml:"minimum_age"`
+	PollInterval string `json:"poll_interval" yaml:"poll_interval"`
+	Cache        string `json:"cache" yaml:"cache"`
+}
+
 // SFTPConfig contains configuration fields for the SFTP input type.
 type SFTPConfig struct {
 	Address        string                `json:"address" yaml:"address"`
@@ -78,6 +111,7 @@ type SFTPConfig struct {
 	Codec          string                `json:"codec" yaml:"codec"`
 	DeleteOnFinish bool                  `json:"delete_on_finish" yaml:"delete_on_finish"`
 	MaxBuffer      int                   `json:"max_buffer" yaml:"max_buffer"`
+	Watcher        watcherConfig         `json:"watcher" yaml:"watcher"`
 }
 
 // NewSFTPConfig creates a new SFTPConfig with default values.
@@ -89,6 +123,12 @@ func NewSFTPConfig() SFTPConfig {
 		Codec:          "all-bytes",
 		DeleteOnFinish: false,
 		MaxBuffer:      1000000,
+		Watcher: watcherConfig{
+			Enabled:      false,
+			MinimumAge:   "1s",
+			PollInterval: "1s",
+			Cache:        "",
+		},
 	}
 }
 
@@ -99,6 +139,7 @@ type sftpReader struct {
 
 	log   log.Modular
 	stats metrics.Type
+	mgr   types.Manager
 
 	client *sftp.Client
 
@@ -108,9 +149,12 @@ type sftpReader struct {
 	scannerMut  sync.Mutex
 	scanner     codec.Reader
 	currentPath string
+
+	watcherPollInterval time.Duration
+	watcherMinAge       time.Duration
 }
 
-func newSFTPReader(conf SFTPConfig, log log.Modular, stats metrics.Type) (*sftpReader, error) {
+func newSFTPReader(conf SFTPConfig, mgr types.Manager, log log.Modular, stats metrics.Type) (*sftpReader, error) {
 	codecConf := codec.NewReaderConfig()
 	codecConf.MaxScanTokenSize = conf.MaxBuffer
 	ctor, err := codec.GetReader(conf.Codec, codecConf)
@@ -118,11 +162,34 @@ func newSFTPReader(conf SFTPConfig, log log.Modular, stats metrics.Type) (*sftpR
 		return nil, err
 	}
 
+	var watcherPollInterval, watcherMinAge time.Duration
+	if conf.Watcher.Enabled {
+		if watcherPollInterval, err = time.ParseDuration(conf.Watcher.PollInterval); err != nil {
+			return nil, fmt.Errorf("failed to parse watcher poll interval: %w", err)
+		}
+
+		if watcherMinAge, err = time.ParseDuration(conf.Watcher.MinimumAge); err != nil {
+			return nil, fmt.Errorf("failed to parse watcher minimum age: %w", err)
+		}
+
+		if conf.Watcher.Cache == "" {
+			return nil, errors.New("a cache must be specified when watcher mode is enabled")
+		}
+
+		_, err = mgr.GetCache(conf.Watcher.Cache)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get the target cache for watcher mode: %w", err)
+		}
+	}
+
 	s := &sftpReader{
-		conf:        conf,
-		log:         log,
-		stats:       stats,
-		scannerCtor: ctor,
+		conf:                conf,
+		log:                 log,
+		stats:               stats,
+		mgr:                 mgr,
+		scannerCtor:         ctor,
+		watcherPollInterval: watcherPollInterval,
+		watcherMinAge:       watcherMinAge,
 	}
 
 	return s, err
@@ -130,6 +197,8 @@ func newSFTPReader(conf SFTPConfig, log log.Modular, stats metrics.Type) (*sftpR
 
 // ConnectWithContext attempts to establish a connection to the target SFTP server.
 func (s *sftpReader) ConnectWithContext(ctx context.Context) error {
+	var err error
+
 	s.scannerMut.Lock()
 	defer s.scannerMut.Unlock()
 
@@ -138,26 +207,28 @@ func (s *sftpReader) ConnectWithContext(ctx context.Context) error {
 	}
 
 	if s.client == nil {
-		var err error
 		if s.client, err = s.conf.Credentials.GetClient(s.conf.Address); err != nil {
 			return err
 		}
-		var filepaths []string
-		for _, p := range s.conf.Paths {
-			paths, err := s.client.Glob(p)
-			if err != nil {
-				s.log.Warnf("Failed to scan files from path %v: %v\n", p, err)
-				continue
-			}
-			filepaths = append(filepaths, paths...)
+		s.paths, err = s.getFilePaths()
+		if err != nil {
+			return err
 		}
-		s.paths = filepaths
 	}
 
 	if len(s.paths) == 0 {
-		s.client.Close()
-		s.client = nil
-		return types.ErrTypeClosed
+		if !s.conf.Watcher.Enabled {
+			s.client.Close()
+			s.client = nil
+			return types.ErrTypeClosed
+		}
+		select {
+		case <-time.After(s.watcherPollInterval):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		s.paths, err = s.getFilePaths()
+		return err
 	}
 
 	nextPath := s.paths[0]
@@ -193,13 +264,23 @@ func (s *sftpReader) ReadWithContext(ctx context.Context) (types.Message, reader
 		return nil, nil, types.ErrNotConnected
 	}
 
-	part, codecAckFn, err := s.scanner.Next(ctx)
+	parts, codecAckFn, err := s.scanner.Next(ctx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) ||
 			errors.Is(err, context.DeadlineExceeded) {
 			err = types.ErrTimeout
 		}
 		if err != types.ErrTimeout {
+			if s.conf.Watcher.Enabled {
+				cache, err := s.mgr.GetCache(s.conf.Watcher.Cache)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to get the cache for sftp watcher mode: %v", err)
+				}
+				err = cache.Set(s.currentPath, []byte("@"))
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to update path in cache %s: %v", s.currentPath, err)
+				}
+			}
 			s.scanner.Close(ctx)
 			s.scanner = nil
 		}
@@ -209,9 +290,11 @@ func (s *sftpReader) ReadWithContext(ctx context.Context) (types.Message, reader
 		return nil, nil, err
 	}
 
-	part.Metadata().Set("sftp_path", s.currentPath)
+	for _, part := range parts {
+		part.Metadata().Set("sftp_path", s.currentPath)
+	}
 	msg := message.New(nil)
-	msg.Append(part)
+	msg.Append(parts...)
 
 	return msg, func(ctx context.Context, res types.Response) error {
 		return codecAckFn(ctx, res.Error())
@@ -239,4 +322,49 @@ func (s *sftpReader) CloseAsync() {
 // timeout occurs.
 func (s *sftpReader) WaitForClose(timeout time.Duration) error {
 	return nil
+}
+
+func (s *sftpReader) getFilePaths() ([]string, error) {
+	var filepaths []string
+	var cache types.Cache
+	var err error
+
+	if s.conf.Watcher.Enabled {
+		cache, err = s.mgr.GetCache(s.conf.Watcher.Cache)
+		if err != nil {
+			return nil, fmt.Errorf("error getting cache in getFilePaths: %v", err)
+		}
+	}
+
+	for _, p := range s.conf.Paths {
+		paths, err := s.client.Glob(p)
+		if err != nil {
+			s.log.Warnf("Failed to scan files from path %v: %v\n", p, err)
+			continue
+		}
+
+		for _, path := range paths {
+			if s.conf.Watcher.Enabled {
+				info, err := s.client.Stat(path)
+				if err != nil {
+					s.log.Warnf("Failed to stat path %v: %v\n", path, err)
+					continue
+				}
+				if time.Since(info.ModTime()) < s.watcherMinAge {
+					continue
+				}
+				if _, err := cache.Get(path); err != nil {
+					filepaths = append(filepaths, path)
+				} else {
+					// Reset the TTL for the path
+					if err = cache.Set(path, []byte("@")); err != nil {
+						s.log.Warnf("Failed to set key in cache for path %v: %v\n", path, err)
+					}
+				}
+			} else {
+				filepaths = append(filepaths, path)
+			}
+		}
+	}
+	return filepaths, nil
 }

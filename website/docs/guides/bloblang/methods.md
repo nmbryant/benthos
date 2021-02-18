@@ -69,6 +69,18 @@ If the result of a target query fails (due to incorrect types, failed parsing, e
 root.doc.id = this.thing.id.string().catch(uuid_v4())
 ```
 
+When the input document is not structured attempting to reference structured fields with `this` will result in an error. Therefore, a convenient way to delete non-structured data is with a catch.
+
+```coffee
+root = this.catch(deleted())
+
+# In:  {"doc":{"foo":"bar"}}
+# Out: {"doc":{"foo":"bar"}}
+
+# In:  not structured data
+# Out: <Message deleted>
+```
+
 ### `from`
 
 Execute a query from the context of another message in the batch. This allows you to mutate events based on the contents of other messages.
@@ -1221,7 +1233,7 @@ root.doc = this.doc.parse_xml()
 
 ### `encode`
 
-Encodes a string or byte array target according to a chosen scheme and returns a string result. Available schemes are: `base64`, `base64url`, `hex`, `ascii85`, `z85`.
+Encodes a string or byte array target according to a chosen scheme and returns a string result. Available schemes are: `base64`, `base64url`, `hex`, `ascii85`.
 
 ```coffee
 root.encoded = this.value.encode("hex")
@@ -1230,17 +1242,31 @@ root.encoded = this.value.encode("hex")
 # Out: {"encoded":"68656c6c6f20776f726c64"}
 ```
 
+```coffee
+root.encoded = content().encode("ascii85")
+
+# In:  this is totally unstructured data
+# Out: {"encoded":"FD,B0+DGm>FDl80Ci\"A>F`)8BEckl6F`M&(+Cno&@/"}
+```
+
 ### `decode`
 
 Decodes an encoded string target according to a chosen scheme and returns the result as a byte array. When mapping the result to a JSON field the value should be cast to a string using the method [`string`][methods.string], or encoded using the method [`encode`][methods.encode], otherwise it will be base64 encoded by default.
 
-Available schemes are: `base64`, `base64url`, `hex`, `ascii85`, `z85`.
+Available schemes are: `base64`, `base64url`, `hex`, `ascii85`.
 
 ```coffee
 root.decoded = this.value.decode("hex").string()
 
 # In:  {"value":"68656c6c6f20776f726c64"}
 # Out: {"decoded":"hello world"}
+```
+
+```coffee
+root = this.encoded.decode("ascii85")
+
+# In:  {"encoded":"FD,B0+DGm>FDl80Ci\"A>F`)8BEckl6F`M&(+Cno&@/"}
+# Out: this is totally unstructured data
 ```
 
 ### `encrypt_aes`

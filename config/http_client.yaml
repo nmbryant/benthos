@@ -5,6 +5,8 @@ http:
   read_timeout: 5s
   root_path: /benthos
   debug_endpoints: false
+  cert_file: ""
+  key_file: ""
 input:
   type: http_client
   http_client:
@@ -38,10 +40,9 @@ input:
     retries: 3
     retry_period: 1s
     stream:
-      delimiter: ""
+      codec: lines
       enabled: false
       max_buffer: 1000000
-      multipart: false
       reconnect: true
     successful_on: []
     timeout: 5s

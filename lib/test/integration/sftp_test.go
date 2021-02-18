@@ -4,10 +4,14 @@ import (
 	"testing"
 	"time"
 
+	sftpSetup "github.com/Jeffail/benthos/v3/internal/service/sftp"
 	"github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var sftpUsername = "foo"
+var sftpPassword = "pass"
 
 var _ = registerIntegrationTest("sftp", func(t *testing.T) {
 	t.Parallel()
@@ -20,7 +24,7 @@ var _ = registerIntegrationTest("sftp", func(t *testing.T) {
 		Repository: "atmoz/sftp",
 		Tag:        "alpine",
 		Cmd: []string{
-			"foo:pass:1001:100:upload",
+			sftpUsername + ":" + sftpPassword + ":1001:100:upload",
 		},
 	})
 	require.NoError(t, err)
@@ -29,18 +33,23 @@ var _ = registerIntegrationTest("sftp", func(t *testing.T) {
 	})
 
 	resource.Expire(900)
-	require.NoError(t, pool.Retry(func() error {
-		return nil
-	}))
 
-	resource.Expire(900)
+	creds := sftpSetup.Credentials{
+		Username: sftpUsername,
+		Password: sftpPassword,
+	}
+
+	require.NoError(t, pool.Retry(func() error {
+		_, err = creds.GetClient("localhost:" + resource.GetPort("22/tcp"))
+		return err
+	}))
 
 	t.Run("sftp", func(t *testing.T) {
 		template := `
 output:
   sftp:
     address: localhost:$PORT
-    path: /upload/test-$ID/$VAR2.txt
+    path: /upload/test-$ID/${!uuid_v4()}.txt
     credentials:
       username: foo
       password: pass
@@ -57,6 +66,17 @@ input:
       password: pass
     codec: $VAR1
     delete_on_finish: false
+    watcher:
+      enabled: $VAR2
+      minimum_age: 100ms
+      poll_interval: 100ms
+      cache: files-memory
+
+resources:
+  caches:
+    files-memory:
+      memory:
+        ttl: 900
 `
 		suite := integrationTests(
 			integrationTestOpenCloseIsolated(),
@@ -66,13 +86,20 @@ input:
 			t, template,
 			testOptPort(resource.GetPort("22/tcp")),
 			testOptVarOne("all-bytes"),
-			testOptVarTwo(`${!count("$ID")}`),
+			testOptVarTwo("false"),
 		)
-		suite.Run(
+
+		watcherSuite := integrationTests(
+			integrationTestOpenClose(),
+			integrationTestStreamParallel(50),
+			integrationTestStreamSequential(20),
+			integrationTestStreamParallelLossyThroughReconnect(20),
+		)
+		watcherSuite.Run(
 			t, template,
 			testOptPort(resource.GetPort("22/tcp")),
-			testOptVarOne("lines"),
-			testOptVarTwo(`all-in-one-file`),
+			testOptVarOne("all-bytes"),
+			testOptVarTwo("true"),
 		)
 	})
 })

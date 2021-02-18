@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### New
+
+- New `azure_queue_storage` input.
+- All inputs with a `codec` field now support multipart.
+- New `codec` field to the `http_client` and `stdin` input.
+
+### Fixed
+
+- The bloblang `encode` method algorithm `ascii85` no longer returns an error when the input is misaligned.
+
+## 3.41.1 - 2021-02-15
+
+### Fixed
+
+- The `catch` method now properly executes dynamic argument functions.
+
+## 3.41.0 - 2021-02-15
+
+### New
+
+- New `http` fields `cert_file` and `key_file`, which when specified enforce HTTPS for the general Benthos server.
+- Bloblang method `catch` now supports `deleted()` as an argument.
+
+### Fixed
+
+- Fixed an issue with custom labels becoming stagnant with the `influxdb` metrics type.
+- Fixed a potential unhandled error when writing to the `azure_queue_storage` output.
+
 ## 3.40.0 - 2021-02-08
 
 ### New

@@ -40,6 +40,7 @@ input:
     stream:
       enabled: false
       reconnect: true
+      codec: lines
 ```
 
 </TabItem>
@@ -90,9 +91,8 @@ input:
     stream:
       enabled: false
       reconnect: true
-      multipart: false
+      codec: lines
       max_buffer: 1000000
-      delimiter: ""
 ```
 
 </TabItem>
@@ -103,10 +103,7 @@ interpolations described [here](/docs/configuration/interpolation#bloblang-queri
 
 ### Streaming
 
-If you enable streaming then Benthos will consume the body of the response as a
-line delimited feed of message parts. Each part is read as an individual message
-unless multipart is set to true, in which case an empty line indicates the end
-of a message.
+If you enable streaming then Benthos will consume the body of the response as a continuous stream of data, breaking messages out following a chosen codec. This allows you to consume APIs that provide long lived streamed data feeds (such as Twitter).
 
 ## Fields
 
@@ -416,7 +413,7 @@ Default: `3`
 
 ### `backoff_on`
 
-A list of status codes whereby retries should be attempted but the period between them should be increased gradually.
+A list of status codes whereby the request should be considered to have failed and retries should be attempted, but the period between them should be increased gradually.
 
 
 Type: `array`  
@@ -424,7 +421,7 @@ Default: `[429]`
 
 ### `drop_on`
 
-A list of status codes whereby the attempt should be considered failed but retries should not be attempted.
+A list of status codes whereby the request should be considered to have failed but retries should not be attempted. This is useful for preventing wasted retries for requests that will never succeed. Note that with these status codes the _request_ is dropped, but _message_ that caused the request will not be dropped.
 
 
 Type: `array`  
@@ -432,7 +429,7 @@ Default: `[]`
 
 ### `successful_on`
 
-A list of status codes whereby the attempt should be considered successful (allows you to configure non-2XX codes).
+A list of status codes whereby the attempt should be considered successful, this is useful for dropping requests that return non-2XX codes indicating that the message has been dealt with, such as a 303 See Other or a 409 Conflict. All 2XX codes are considered successful unless they are present within `backoff_on` or `drop_on`, regardless of this field.
 
 
 Type: `array`  
@@ -485,13 +482,38 @@ Sets whether to re-establish the connection once it is lost.
 Type: `bool`  
 Default: `true`  
 
-### `stream.multipart`
+### `stream.codec`
 
-When running in stream mode sets whether an empty line indicates the end of a message batch, and only then is the batch flushed downstream.
+The way in which the bytes of a continuous stream are converted into messages. It's possible to consume lines using a custom delimiter with the `delim:x` codec, where x is the character sequence custom delimiter. It's not necessary to add gzip in the codec when the response headers specify it as it will be decompressed automatically.
 
 
-Type: `bool`  
-Default: `false`  
+Type: `string`  
+Default: `"lines"`  
+
+| Option | Summary |
+|---|---|
+| `auto` | EXPERIMENTAL: Attempts to derive a codec for each file based on information such as the extension. For example, a .tar.gz file would be consumed with the `gzip/tar` codec. Defaults to all-bytes. |
+| `all-bytes` | Consume the entire file as a single binary message. |
+| `chunker:x` | Consume the file in chunks of a given number of bytes. |
+| `csv` | Consume structured rows as comma separated values, the first row must be a header row. |
+| `delim:x` | Consume the file in segments divided by a custom delimiter. |
+| `gzip` | Decompress a gzip file, this codec should precede another codec, e.g. `gzip/all-bytes`, `gzip/tar`, `gzip/csv`, etc. |
+| `lines` | Consume the file in segments divided by linebreaks. |
+| `multipart` | Consumes the output of another codec and batches messages together. A batch ends when an empty message is consumed. For example, the codec `lines/multipart` could be used to consume multipart messages where an empty line indicates the end of each batch. |
+| `tar` | Parse the file as a tar archive, and consume each file of the archive as a message. |
+
+
+```yaml
+# Examples
+
+codec: lines
+
+codec: "delim:\t"
+
+codec: delim:foobar
+
+codec: csv
+```
 
 ### `stream.max_buffer`
 
@@ -500,14 +522,5 @@ Must be larger than the largest line of the stream.
 
 Type: `number`  
 Default: `1000000`  
-
-### `stream.delimiter`
-
-A string that indicates the end of a message within the stream. If left empty
-then line feed (\n) is used.
-
-
-Type: `string`  
-Default: `""`  
 
 

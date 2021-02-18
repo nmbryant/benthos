@@ -38,6 +38,11 @@ input:
       password: ""
     paths: []
     codec: all-bytes
+    watcher:
+      enabled: false
+      minimum_age: 1s
+      poll_interval: 1s
+      cache: ""
 ```
 
 </TabItem>
@@ -55,6 +60,11 @@ input:
     codec: all-bytes
     delete_on_finish: false
     max_buffer: 1000000
+    watcher:
+      enabled: false
+      minimum_age: 1s
+      poll_interval: 1s
+      cache: ""
 ```
 
 </TabItem>
@@ -113,7 +123,7 @@ Default: `[]`
 
 ### `codec`
 
-The way in which the bytes of consumed files are converted into messages, codecs are useful for specifying how large files might be processed in small chunks rather than loading it all in memory. It's possible to consume lines using a custom delimiter with the `delim:x` codec, where x is the character sequence custom delimiter.
+The way in which the bytes of consumed files are converted into messages, codecs are useful for specifying how large files might be processed in small chunks rather than loading it all in memory. It's possible to consume lines using a custom delimiter with the `delim:x` codec, where x is the character sequence custom delimiter. Codecs can be chained using `/`, for example a gzip compressed CSV file can be consumed with the codec `gzip/csv`.
 
 
 Type: `string`  
@@ -121,15 +131,15 @@ Default: `"all-bytes"`
 
 | Option | Summary |
 |---|---|
-| `auto` | EXPERIMENTAL: Attempts to derive a codec for each file based on information such as the extension. For example, a .tar.gz file would be consumed with the tar-gzip codec. Defaults to all-bytes. |
+| `auto` | EXPERIMENTAL: Attempts to derive a codec for each file based on information such as the extension. For example, a .tar.gz file would be consumed with the `gzip/tar` codec. Defaults to all-bytes. |
 | `all-bytes` | Consume the entire file as a single binary message. |
-| `csv` | Consume structured rows as comma separated values, the first row must be a header row. |
-| `csv-gzip` | Consume structured rows as comma separated values from a gzip compressed file, the first row must be a header row. |
-| `delim:x` | Consume the file in segments divided by a custom delimiter. |
 | `chunker:x` | Consume the file in chunks of a given number of bytes. |
+| `csv` | Consume structured rows as comma separated values, the first row must be a header row. |
+| `delim:x` | Consume the file in segments divided by a custom delimiter. |
+| `gzip` | Decompress a gzip file, this codec should precede another codec, e.g. `gzip/all-bytes`, `gzip/tar`, `gzip/csv`, etc. |
 | `lines` | Consume the file in segments divided by linebreaks. |
+| `multipart` | Consumes the output of another codec and batches messages together. A batch ends when an empty message is consumed. For example, the codec `lines/multipart` could be used to consume multipart messages where an empty line indicates the end of each batch. |
 | `tar` | Parse the file as a tar archive, and consume each file of the archive as a message. |
-| `tar-gzip` | Parse the file as a gzip compressed tar archive, and consume each file of the archive as a message. |
 
 
 ```yaml
@@ -140,6 +150,8 @@ codec: lines
 codec: "delim:\t"
 
 codec: delim:foobar
+
+codec: gzip/csv
 ```
 
 ### `delete_on_finish`
@@ -157,5 +169,63 @@ The largest token size expected when consuming delimited files.
 
 Type: `number`  
 Default: `1000000`  
+
+### `watcher`
+
+An experimental mode whereby the input will periodically scan the target paths for new files and consume them, when all files are consumed the input will continue polling for new files.
+
+
+Type: `object`  
+Requires version 3.42.0 or newer  
+
+### `watcher.enabled`
+
+Whether file watching is enabled.
+
+
+Type: `bool`  
+Default: `false`  
+
+### `watcher.minimum_age`
+
+The minimum period of time since a file was last updated before attempting to consume it. Increasing this period decreases the likelihood that a file will be consumed whilst it is still being written to.
+
+
+Type: `string`  
+Default: `"1s"`  
+
+```yaml
+# Examples
+
+minimum_age: 10s
+
+minimum_age: 1m
+
+minimum_age: 10m
+```
+
+### `watcher.poll_interval`
+
+The interval between each attempt to scan the target paths for new files.
+
+
+Type: `string`  
+Default: `"1s"`  
+
+```yaml
+# Examples
+
+poll_interval: 100ms
+
+poll_interval: 1s
+```
+
+### `watcher.cache`
+
+A [cache resource](/docs/components/caches/about) for storing the paths of files already consumed.
+
+
+Type: `string`  
+Default: `""`  
 
 

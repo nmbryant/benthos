@@ -5,6 +5,8 @@ http:
   read_timeout: 5s
   root_path: /benthos
   debug_endpoints: false
+  cert_file: ""
+  key_file: ""
 input:
   type: kafka
   kafka:
@@ -28,7 +30,6 @@ input:
     max_processing_period: 100ms
     sasl:
       access_token: ""
-      enabled: false
       mechanism: ""
       password: ""
       token_cache: ""
@@ -74,7 +75,6 @@ output:
     retry_as_batch: false
     sasl:
       access_token: ""
-      enabled: false
       mechanism: ""
       password: ""
       token_cache: ""

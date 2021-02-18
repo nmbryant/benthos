@@ -15,6 +15,7 @@ import (
 	"github.com/Jeffail/benthos/v3/lib/config"
 	"github.com/Jeffail/benthos/v3/lib/input"
 	"github.com/Jeffail/benthos/v3/lib/log"
+	"github.com/Jeffail/benthos/v3/lib/manager"
 	"github.com/Jeffail/benthos/v3/lib/message"
 	"github.com/Jeffail/benthos/v3/lib/metrics"
 	"github.com/Jeffail/benthos/v3/lib/output"
@@ -23,7 +24,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 )
 
 type testConfigVars struct {
@@ -331,7 +332,10 @@ func initInput(t *testing.T, env *testEnvironment) types.Input {
 	require.NoError(t, err)
 	assert.Empty(t, lints)
 
-	input, err := input.New(s.Input, types.NoopMgr(), env.log, env.stats)
+	mgr, err := manager.New(s.Manager, nil, log.Noop(), metrics.Noop())
+	require.NoError(t, err)
+
+	input, err := input.New(s.Input, mgr, env.log, env.stats)
 	require.NoError(t, err)
 
 	if env.sleepAfterInput > 0 {
@@ -355,7 +359,10 @@ func initOutput(t *testing.T, trans <-chan types.Transaction, env *testEnvironme
 	require.NoError(t, err)
 	assert.Empty(t, lints)
 
-	output, err := output.New(s.Output, types.NoopMgr(), env.log, env.stats)
+	mgr, err := manager.New(s.Manager, nil, log.Noop(), metrics.Noop())
+	require.NoError(t, err)
+
+	output, err := output.New(s.Output, mgr, env.log, env.stats)
 	require.NoError(t, err)
 
 	require.NoError(t, output.Consume(trans))

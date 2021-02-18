@@ -5,12 +5,13 @@ http:
   read_timeout: 5s
   root_path: /benthos
   debug_endpoints: false
+  cert_file: ""
+  key_file: ""
 input:
   type: stdin
   stdin:
-    delimiter: ""
+    codec: lines
     max_buffer: 1000000
-    multipart: false
 buffer:
   type: none
   none: {}
