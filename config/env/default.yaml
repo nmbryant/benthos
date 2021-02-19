@@ -496,12 +496,14 @@ input:
             poll_interval: ${INPUT_SFTP_WATCHER_POLL_INTERVAL:1s}
         socket:
           address: ${INPUT_SOCKET_ADDRESS:/tmp/benthos.sock}
+          codec: ${INPUT_SOCKET_CODEC:lines}
           delimiter: ${INPUT_SOCKET_DELIMITER}
           max_buffer: ${INPUT_SOCKET_MAX_BUFFER:1000000}
           multipart: ${INPUT_SOCKET_MULTIPART:false}
           network: ${INPUT_SOCKET_NETWORK:unix}
         socket_server:
           address: ${INPUT_SOCKET_SERVER_ADDRESS:/tmp/benthos.sock}
+          codec: ${INPUT_SOCKET_SERVER_CODEC:lines}
           delimiter: ${INPUT_SOCKET_SERVER_DELIMITER}
           max_buffer: ${INPUT_SOCKET_SERVER_MAX_BUFFER:1000000}
           multipart: ${INPUT_SOCKET_SERVER_MULTIPART:false}

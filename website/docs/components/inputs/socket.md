@@ -16,7 +16,7 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 
-Connects to a (tcp/unix) socket and consumes a continuous stream of messages.
+Connects to a tcp or unix socket and consumes a continuous stream of messages.
 
 
 <Tabs defaultValue="common" values={[
@@ -32,6 +32,7 @@ input:
   socket:
     network: unix
     address: /tmp/benthos.sock
+    codec: lines
 ```
 
 </TabItem>
@@ -43,23 +44,12 @@ input:
   socket:
     network: unix
     address: /tmp/benthos.sock
-    multipart: false
+    codec: lines
     max_buffer: 1000000
-    delimiter: ""
 ```
 
 </TabItem>
 </Tabs>
-
-If multipart is set to false each line of data is read as a separate message. If
-multipart is set to true each line is read as a message part, and an empty line
-indicates the end of a message.
-
-Messages consumed by this input can be processed in parallel, meaning a single
-instance of this input can utilise any number of threads within a
-`pipeline` section of a config.
-
-If the delimiter field is left empty then line feed (\n) is used.
 
 ## Fields
 
@@ -88,13 +78,38 @@ address: /tmp/benthos.sock
 address: 127.0.0.1:6000
 ```
 
-### `multipart`
+### `codec`
 
-Whether messages should be consumed as multiple parts. If so, each line is consumed as a message parts and the full message ends with an empty line.
+The way in which the bytes of a data source should be converted into discrete messages, codecs are useful for specifying how large files or contiunous streams of data might be processed in small chunks rather than loading it all in memory. It's possible to consume lines using a custom delimiter with the `delim:x` codec, where x is the character sequence custom delimiter. Codecs can be chained with `/`, for example a gzip compressed CSV file can be consumed with the codec `gzip/csv`.
 
 
-Type: `bool`  
-Default: `false`  
+Type: `string`  
+Default: `"lines"`  
+
+| Option | Summary |
+|---|---|
+| `auto` | EXPERIMENTAL: Attempts to derive a codec for each file based on information such as the extension. For example, a .tar.gz file would be consumed with the `gzip/tar` codec. Defaults to all-bytes. |
+| `all-bytes` | Consume the entire file as a single binary message. |
+| `chunker:x` | Consume the file in chunks of a given number of bytes. |
+| `csv` | Consume structured rows as comma separated values, the first row must be a header row. |
+| `delim:x` | Consume the file in segments divided by a custom delimiter. |
+| `gzip` | Decompress a gzip file, this codec should precede another codec, e.g. `gzip/all-bytes`, `gzip/tar`, `gzip/csv`, etc. |
+| `lines` | Consume the file in segments divided by linebreaks. |
+| `multipart` | Consumes the output of another codec and batches messages together. A batch ends when an empty message is consumed. For example, the codec `lines/multipart` could be used to consume multipart messages where an empty line indicates the end of each batch. |
+| `tar` | Parse the file as a tar archive, and consume each file of the archive as a message. |
+
+
+```yaml
+# Examples
+
+codec: lines
+
+codec: "delim:\t"
+
+codec: delim:foobar
+
+codec: gzip/csv
+```
 
 ### `max_buffer`
 
@@ -103,13 +118,5 @@ The maximum message buffer size. Must exceed the largest message to be consumed.
 
 Type: `number`  
 Default: `1000000`  
-
-### `delimiter`
-
-The delimiter to use to detect the end of each message. If left empty line breaks are used.
-
-
-Type: `string`  
-Default: `""`  
 
 
